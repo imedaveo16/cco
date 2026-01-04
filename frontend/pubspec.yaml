@@ -1,4 +1,4 @@
-name: cco_frontend
+name: dgpc_cco
 description: Sovereign Mission Control Console for DGPC
 version: 1.0.0+1
 environment:
