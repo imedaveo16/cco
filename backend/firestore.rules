@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // VALIDATION FUNCTIONS //
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
+    }
+    
+    function isCommander() {
+      return hasRole('NATIONAL_COMMANDER') || hasRole('WILAYA_COMMANDER');
+    }
+    
+    function isNationalCommander() {
+      return hasRole('NATIONAL_COMMANDER');
+    }
+    
+    // OPERATIONS COLLECTION //
+    match /operations/{opId} {
+      // Read: All authenticated personnel can read active ops (subject to redaction in UI, but Rules allow broader read for simplicity in v1, refined later)
+      // Ideally: hierarchical read.
+      allow read: if isAuthenticated(); 
+      
+      // Write: Only Commanders or Duty Officers can create/update ops.
+      allow create, update: if isCommander() || hasRole('DUTY_OFFICER');
+      
+      // Delete: Only National Commander can delete (soft delete preferred).
+      allow delete: if isNationalCommander();
+      
+      // SUB-COLLECTIONS
+      match /logs/{logId} {
+        allow read: if isCommander(); // Only commanders read raw logs
+        allow create: if true; // System writes logs
+      }
+    }
+    
+    // UNITS (Telemetry) //
+    match /units/{unitId} {
+      allow read: if isAuthenticated();
+      // Only the unit itself or a dispatcher can update location/status
+      allow update: if isAuthenticated() && (request.auth.uid == unitId || hasRole('DISPATCHER'));
+    }
+    
+    // REPORTS (Citizen/Field) //
+    match /reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create: if true; // Public reporting allowed (authenticated via simple auth or anon for citizens? Prompt implies "Citizen reporting application" source)
+    }
+    
+    // SYSTEM SETTINGS //
+    match /system/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isNationalCommander();
+    }
+  }
+}
